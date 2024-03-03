@@ -71,10 +71,10 @@ else:
     print("내 잔고 : " + str(format(int(my_Balance), ",")) + " 원")
     print("date:" + str(datetime.datetime.now()))
     best_k_run = 1  # k값 구하기 동작 여부
-    buy_price = 0  # 매수 총가
+    buy_price = 100  # 매수 총가
     while 1:
         try:
-            ticker = "KRW-DOGE"  # 종목 코드
+            ticker = "KRW-BTC"  # 종목 코드
             now = datetime.datetime.now()  # 현재시각
             start_time = get_start_time(ticker)  # 거래 시작 시각
             end_time = start_time + datetime.timedelta(days=1)  # 거래 종료 시각
