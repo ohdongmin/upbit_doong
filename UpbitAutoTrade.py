@@ -11,6 +11,8 @@ secret = "MCEq01J8Ha8TJ8WTIBAG99wFPwfow8DoEMnhvwmp"  # Upbit API secret 키
 
 fee = 0.9995  # 거래 수수료 0.05%
 
+
+
 # 내 잔고 조회_시작
 def get_balance(ticker):
     balances = upbit.get_balances()
@@ -170,3 +172,6 @@ else:
         except Exception as e:
             print(e)
             time.sleep(1)
+#전량매수 전량매도
+#balance = upbit.get_balance("KRW")
+#ret = upbit.buy_market_order("KRW-BTC", balance)
