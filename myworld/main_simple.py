@@ -24,12 +24,14 @@ def sell(ticker):
     time.sleep(0.1)
     balance = upbit.get_balance(ticker)
     s = upbit.sell_market_order(ticker, balance)
-    msg = str(ticker)+"매도 완료"+"\n"+json.dumps(s, ensure_ascii = False)
+    current_price = pyupbit.get_current_price(target_ticker)
+    msg = str(ticker)+"매도 완료"+str(current_price*balance)+"\n"+json.dumps(s, ensure_ascii = False)
     print(msg)
     send_line(msg)
 
-def get_rsi(df, period=14):
+def get_rsi(target_ticker, period=14):
 
+    df = pyupbit.get_ohlcv(target_ticker, 'minute10')
     # 전일 대비 변동 평균
     df['change'] = df['close'].diff()
 
@@ -133,36 +135,65 @@ token = os.environ["token"] # 앞서 발급 받은 토큰을 여기 넣음
 # balances = upbit.get_balances()
 # my_money = float(balances[0]['balance'])    # 내 원화
 
-
+trade_money =6000
 while True:
     try : 
+        target_RSI = 25
+        sell_rsi = 60
         while True:
-            target_ticker = searchRSI(30)
+            target_ticker = searchRSI(target_RSI)
             time.sleep(1)
             if target_ticker :
-                buy(target_ticker,6000)
+                buy(target_ticker,trade_money)
+                bought_rsi = get_rsi(target_ticker,14).iloc[-1]
                 TF = True
                 break
             else :
-                print("계속 탐색중입니다. Target RSI값을 높여주세요.")
+                print(f"계속 탐색중입니다. Target RSI : {target_RSI}")
+                target_RSI += 1
         firstprice =pyupbit.get_current_price(target_ticker)
-
+        cnt = 1
+        bp =False
+        x = 0
         while TF == True :
             Coin_bought = upbit.get_balance(target_ticker)
             total_balance = Coin_bought * pyupbit.get_current_price(target_ticker) 
-            df = pyupbit.get_ohlcv(target_ticker, 'minute10')
-            rsi_value = get_rsi(df,14)[-1]
+            rsi_value = get_rsi(target_ticker,14).iloc[-1]
             print(f"매도 rsi : {rsi_value} ")
-            if rsi_value >55 :
-                TF = False
-                if total_balance > 100000:
-                    send_line("매도 스킵합니다")
+            if total_balance > 100000:
+                send_line("매도 스킵합니다")
+                break
+            if Coin_bought<1:
+                send_line('already sold')
+                break
+            if total_balance < trade_money*cnt*0.95:
+                bp = True
+                sell(target_ticker)
+                break
+            if rsi_value >60 :
+                time.sleep(300)
+                rsi_value = get_rsi(target_ticker,14).iloc[-1]
+                if rsi_value < sell_rsi -x:
+                    sell(target_ticker)
+                    send_line(f'sell volume:{total_balance}')
                     break
                 else:
-                    sell(target_ticker)
-                    break
+                    sell_rsi = max(rsi_value,sell_rsi)
+                    if sell_rsi >=65:
+                        x =2
+                    elif sell_rsi>= 75:
+                        x = 1
+                    print(f'current rsi : {rsi_value}, waiting...')
+            elif rsi_value < min(30,bought_rsi-2) and cnt <= 3: 
+                bought_rsi -= 2
+                buy(target_ticker,trade_money)
+                send_line('buy more')
+                cnt += 1
+                time.sleep(300)
             else: 
                 print("거래 조건 미충족")
                 time.sleep(100)
+        if bp ==True: 
+            break
     except :
         time.sleep(1)
