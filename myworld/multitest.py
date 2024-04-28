@@ -11,21 +11,38 @@ import requests
 def buy(ticker, money):
     time.sleep(0.1)
     b = upbit.buy_market_order(ticker, money)
+    current = pyupbit.get_current_price(ticker)
     try:
         if b['error']:
             b = upbit.buy_market_order(ticker, 100000)
             msg = "error " + str(ticker)+" "+str(100000)+"원 매수시도"+"\n"+json.dumps(b, ensure_ascii = False)
     except:
-        msg = str(ticker)+" "+str(money)+"원 매수완료"+"\n"+json.dumps(b, ensure_ascii = False)
+        msg = str(ticker)+" "+str(money)+"원 매수완료"
+        w = eval(json.dumps(b, ensure_ascii = False))
+        lst = [w['created_at'], w['market'], w['side'], int(w['price'])/current, current, int(w['price']), int(w['reserved_fee']), int(w['locked'])]
+        df = pd.read_excel("trading history.xlsx")
+        row_cnt = len(df)
+        df.loc[row_cnt+1] =lst
+        df.to_excel("trading history.xlsx",index = False)
     print(msg)
     send_line(msg)
 
 def sell(ticker):
     time.sleep(0.1)
     balance = upbit.get_balance(ticker)
+    current_price = pyupbit.get_current_price(ticker)
+    sell_volume = round(current_price*balance,0)
+
+    ror = round((current_price/upbit.get_avg_buy_price(ticker)-1)*100,2)
+    msg = str(ticker)+"매도 완료"+str(sell_volume) + '\n' + "수익률 :" +str(ror) +"%"
     s = upbit.sell_market_order(ticker, balance)
-    current_price = pyupbit.get_current_price(target_ticker)
-    msg = str(ticker)+"매도 완료"+str(current_price*balance)+"\n"+json.dumps(s, ensure_ascii = False)
+    ww = eval(json.dumps(s, ensure_ascii = False))
+    lst = [ww['created_at'], ww['market'], ww['side'], float(ww['volume']), current_price, int(float(ww['volume'])*current_price), int(float(ww['volume'])*current_price*0.0005), round(float(ww['volume'])*current_price*0.9995)]
+    df = pd.read_excel("trading history.xlsx")
+    row_cnt = len(df)
+    df.loc[row_cnt+1] =lst
+    df.to_excel("trading history.xlsx",index = False)
+
     print(msg)
     send_line(msg)
 
@@ -115,8 +132,9 @@ def searchRSI(settingRSI):
     except :
         time.sleep(2)
 
-def auto_trade(money):
+def auto_trade(money,i):
     trade_money = money
+    process_num = i
     while True:
         try : 
             target_RSI = 25
@@ -130,32 +148,31 @@ def auto_trade(money):
                     TF = True
                     break
                 else :
-                    print(f"계속 탐색중입니다. Target RSI : {target_RSI}")
+                    print(f"{process_num}process 계속 탐색중입니다. Target RSI : {target_RSI}")
                     target_RSI += 1
-            firstprice =pyupbit.get_current_price(target_ticker)
             cnt = 1
             bp =False
             while TF == True :
                 Coin_bought = upbit.get_balance(target_ticker)
-                total_balance = Coin_bought * pyupbit.get_current_price(target_ticker) 
+                total_balance = Coin_bought * pyupbit.get_current_price(target_ticker) ### wrong calculation
                 rsi_value = get_rsi(target_ticker,14).iloc[-1]
-                print(f"매도 rsi : {rsi_value} ")
+                print(f"{target_ticker} rsi : {rsi_value} ")
                 if total_balance > 100000:
                     send_line("매도 스킵합니다")
+                    bp = True
                     break
-                if Coin_bought<1:
+                if Coin_bought<0.000001:
                     send_line('already sold')
                     break
-                if total_balance < trade_money*cnt*0.95:
+                if pyupbit.get_current_price(target_ticker) < upbit.get_avg_buy_price(target_ticker)*0.95:
                     bp = True
                     sell(target_ticker)
                     break
                 if rsi_value >60 :
-                    time.sleep(300)
+                    time.sleep(600)
                     rsi_value = get_rsi(target_ticker,14).iloc[-1]
                     if rsi_value < sell_rsi :
                         sell(target_ticker)
-                        send_line(f'sell volume:{total_balance}')
                         break
                     else:
                         sell_rsi = max(rsi_value,sell_rsi)
@@ -167,7 +184,7 @@ def auto_trade(money):
                     cnt += 1
                     time.sleep(300)
                 else: 
-                    print("거래 조건 미충족")
+                    print(f"{process_num}process : 거래 조건 미충족")
                     time.sleep(100)
             if bp ==True: 
                 break
@@ -191,12 +208,12 @@ if __name__ == '__main__':
     import multiprocessing
 
     procs = []
-    for i in range(2):
-        p = multiprocessing.Process(target=auto_trade, args=(6000+i, ))
+    for i in range(3):
+        p = multiprocessing.Process(target=auto_trade, args=(6000+i,i ))
         print(f'start trading: {i} multiprocess')
         p.start()
         procs.append(p)
-        time.sleep(600)
+        time.sleep(60)
 
     for p in procs:
         p.join()  # 프로세스가 모두 종료될 때까지 대기
